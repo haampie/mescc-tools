@@ -31,6 +31,35 @@ void handle_variables(char** argv, struct Token* n);
 char* fe_trial;
 char* fe_mpath;
 
+/* Reusable per-command token and string pools, rewound at the start of every
+ * collect_command. */
+struct Token** tok_pool;
+char** str_pool;
+int pool_tok_idx;
+int pool_str_idx;
+
+/* Hand out a zeroed Token from the pool (reused across commands). */
+struct Token* pool_token()
+{
+	require(pool_tok_idx < MAX_ARRAY, "SCRIPT TOO LONG or TOO MANY ENVARS\nABORTING HARD\n");
+	struct Token* t = tok_pool[pool_tok_idx];
+	pool_tok_idx = pool_tok_idx + 1;
+	t->value = NULL;
+	t->var = NULL;
+	t->next = NULL;
+	return t;
+}
+
+/* Hand out a zeroed MAX_STRING buffer from the pool (reused across commands). */
+char* pool_string()
+{
+	require(pool_str_idx < MAX_ARRAY, "LINE IS TOO LONG\nABORTING HARD\n");
+	char* s = str_pool[pool_str_idx];
+	pool_str_idx = pool_str_idx + 1;
+	memset(s, 0, MAX_STRING);
+	return s;
+}
+
 /* Cached envp array for execve */
 char** envp_cache;
 /* Indicates if the envp_cache needs to be updated */
@@ -1138,12 +1167,14 @@ int _execute(FILE* script, char** argv)
 int collect_command(FILE* script, char** argv)
 {
 	command_done = FALSE;
+	/* Rewind the per-command pools: the previous command's tokens are fully
+	 * executed before we get here, so reuse the same nodes/buffers. */
+	pool_tok_idx = 0;
+	pool_str_idx = 0;
 	/* Initialize token */
 	struct Token* n;
-	n = calloc(1, sizeof(struct Token));
-	require(n != NULL, "Memory initialization of token in collect_command failed\n");
-	char* s = calloc(MAX_STRING, sizeof(char));
-	require(s != NULL, "Memory initialization of token in collect_command failed\n");
+	n = pool_token();
+	char* s = pool_string();
 	token = n;
 	int index = 0;
 	int alias_index;
@@ -1173,8 +1204,7 @@ int collect_command(FILE* script, char** argv)
 
 			/* add to token */
 			n->value = s;
-			s = calloc(MAX_STRING, sizeof(char));
-			require(s != NULL, "Memory initialization of next token node in collect_command failed\n");
+			s = pool_string();
 			/* Deal with variables */
 			handle_variables(argv, n);
 
@@ -1186,8 +1216,7 @@ int collect_command(FILE* script, char** argv)
 			}
 
 			/* Prepare for next loop */
-			n->next = calloc(1, sizeof(struct Token));
-			require(n->next != NULL, "Memory initialization of next token node in collect_command failed\n");
+			n->next = pool_token();
 			n = n->next;
 		}
 		while(alias_index != 0);
@@ -1375,6 +1404,20 @@ int main(int argc, char** argv, char** envp)
 	require(fe_mpath != NULL, "Memory initialization of fe_mpath failed\n");
 	envp_cache = NULL;
 	env_dirty = TRUE;
+
+	/* Allocate the reusable per-command token and string pools once up front */
+	int pool_i;
+	tok_pool = calloc(MAX_ARRAY, sizeof(struct Token*));
+	require(tok_pool != NULL, "Memory initialization of token pool failed\n");
+	str_pool = calloc(MAX_ARRAY, sizeof(char*));
+	require(str_pool != NULL, "Memory initialization of string pool failed\n");
+	for(pool_i = 0; pool_i < MAX_ARRAY; pool_i = pool_i + 1)
+	{
+		tok_pool[pool_i] = calloc(1, sizeof(struct Token));
+		require(tok_pool[pool_i] != NULL, "Memory initialization of token pool node failed\n");
+		str_pool[pool_i] = calloc(MAX_STRING, sizeof(char));
+		require(str_pool[pool_i] != NULL, "Memory initialization of string pool buffer failed\n");
+	}
 
 	/* Initalize structs */
 	token = calloc(1, sizeof(struct Token));
