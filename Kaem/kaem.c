@@ -27,6 +27,10 @@
 /* Prototypes from other files */
 void handle_variables(char** argv, struct Token* n);
 
+/* find_executable buffers */
+char* fe_trial;
+char* fe_mpath;
+
 /*
  * UTILITY FUNCTIONS
  */
@@ -114,11 +118,11 @@ char* find_executable(char* name)
 		return name;
 	}
 
-	char* trial = calloc(MAX_STRING, sizeof(char));
-	char* MPATH = calloc(MAX_STRING, sizeof(char)); /* Modified PATH */
-	require(MPATH != NULL, "Memory initialization of MPATH in find_executable failed\n");
+	/* trial is the candidate path returned on success. */
+	char* trial = fe_trial;
+	char* MPATH = fe_mpath; /* Modified PATH */
+	memset(trial, 0, MAX_STRING);
 	strcpy(MPATH, PATH);
-	FILE* t;
 	char* next = find_char(MPATH, ':');
 	int index;
 	int offset;
@@ -158,11 +162,9 @@ char* find_executable(char* name)
 
 		/* Try the trial */
 		require(strlen(trial) < MAX_STRING, "COMMAND TOO LONG!\nABORTING HARD\n");
-		t = fopen(trial, "r");
 
-		if(NULL != t)
+		if(0 == access(trial, 0))
 		{
-			fclose(t);
 			return trial;
 		}
 
@@ -1350,6 +1352,13 @@ int main(int argc, char** argv, char** envp)
 	WARNINGS = FALSE;
 	char* filename = "kaem.run";
 	FILE* script = NULL;
+
+	/* Allocate find_executable's buffers once up front */
+	fe_trial = calloc(MAX_STRING, sizeof(char));
+	require(fe_trial != NULL, "Memory initialization of fe_trial failed\n");
+	fe_mpath = calloc(MAX_STRING, sizeof(char));
+	require(fe_mpath != NULL, "Memory initialization of fe_mpath failed\n");
+
 	/* Initalize structs */
 	token = calloc(1, sizeof(struct Token));
 	require(token != NULL, "Memory initialization of token failed\n");
