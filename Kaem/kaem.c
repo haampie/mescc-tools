@@ -31,6 +31,11 @@ void handle_variables(char** argv, struct Token* n);
 char* fe_trial;
 char* fe_mpath;
 
+/* Cached envp array for execve */
+char** envp_cache;
+/* Indicates if the envp_cache needs to be updated */
+int env_dirty;
+
 /*
  * UTILITY FUNCTIONS
  */
@@ -234,6 +239,19 @@ char** list_to_array(struct Token* s)
 	}
 
 	return array;
+}
+
+/* Return the envp array for execve, rebuilding it only when the environment
+ * has changed since last time. */
+char** env_to_array()
+{
+	if(env_dirty)
+	{
+		envp_cache = list_to_array(env);
+		env_dirty = FALSE;
+	}
+
+	return envp_cache;
 }
 
 /* Function to handle the correct options for escapes */
@@ -551,6 +569,9 @@ void add_envar()
 
 	/* Since we found the variable we need only to set it to its new value */
 	n->value = newvalue;
+
+	/* Invalidate the cached envp array. */
+	env_dirty = TRUE;
 }
 
 /* Add an alias */
@@ -821,6 +842,9 @@ void unset()
 		}
 
 	}
+
+	/* Invalidate the cached envp array. */
+	env_dirty = TRUE;
 }
 
 void execute(FILE* script, char** argv);
@@ -1063,9 +1087,10 @@ int _execute(FILE* script, char** argv)
 
 	int f = 0;
 
+	envp = env_to_array();
+
 #ifdef __uefi__
 	array = list_to_array(token);
-	envp = list_to_array(env);
 	return spawn(program, array, envp);
 #else
 	if(!exec)
@@ -1091,7 +1116,6 @@ int _execute(FILE* script, char** argv)
 		 * segfaults.                                                 *
 		 **************************************************************/
 		array = list_to_array(token);
-		envp = list_to_array(env);
 
 		if(FALSE == FUZZING)
 		{
@@ -1349,6 +1373,8 @@ int main(int argc, char** argv, char** envp)
 	require(fe_trial != NULL, "Memory initialization of fe_trial failed\n");
 	fe_mpath = calloc(MAX_STRING, sizeof(char));
 	require(fe_mpath != NULL, "Memory initialization of fe_mpath failed\n");
+	envp_cache = NULL;
+	env_dirty = TRUE;
 
 	/* Initalize structs */
 	token = calloc(1, sizeof(struct Token));
