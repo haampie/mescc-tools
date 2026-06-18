@@ -192,9 +192,6 @@ char** list_to_array(struct Token* s)
 
 	while(n != NULL)
 	{
-		/* Loop through each node and assign it to an array index */
-		array[index] = calloc(MAX_STRING, sizeof(char));
-		require(array[index] != NULL, "Memory initialization of array[index] in conversion of list to array failed\n");
 		/* Bounds checking */
 		/* No easy way to tell which it is, output generic message */
 		require(index < MAX_ARRAY, "SCRIPT TOO LONG or TOO MANY ENVARS\nABORTING HARD\n");
@@ -224,22 +221,16 @@ char** list_to_array(struct Token* s)
 			{
 				element[i + offset] = n->value[i];
 			}
-		}
 
-		/* Insert elements if not empty */
-		if(!match("", element))
-		{
+			element[offset + value_length] = 0;
+
+			array[index] = calloc(MAX_STRING, sizeof(char));
+			require(array[index] != NULL, "Memory initialization of array[index] in conversion of list to array failed\n");
 			strcpy(array[index], element);
 		}
 
 		n = n->next;
 		index = index + 1;
-
-		/* Reset element */
-		for(i = 0; i < MAX_STRING; i = i + 1)
-		{
-			element[i] = 0;
-		}
 	}
 
 	return array;
